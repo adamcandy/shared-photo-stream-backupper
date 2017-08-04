@@ -142,6 +142,7 @@ class PhotoStreamBackUpper
           time_epoch = 0
         end
         timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d_%H%M%S")
+        uuid = "#{id[0]}".tr('-', '').downcase
 
         if files.size == 0
           puts "  ERROR".red + ", no files found in: #{folder}" if @verbose
@@ -149,11 +150,25 @@ class PhotoStreamBackUpper
         end
 
         files.each do |file|
+          if file.include?('.5.jpg')
+            puts "  WARN".yellow + ", found pesky video thumbnail: #{file}"
+          end
+        #  if File.extname(file).downcase == '.mp4'
+        #    puts files
+        #    base = File.basename(file, '.mp4')
+        #    puts "#{base}.5.jpg"
+        #  end
+        end
+
+        files.each do |file|
           count += 1
-          base = File.basename(file)
+          base = File.basename(file).downcase
+          if File.extname(base).downcase == '.jpeg'
+            base = File.basename(file, '.jpeg').downcase + '.jpg'
+          end
           src_file = Shellwords.escape("#{file}")
 
-          dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}_"+"#{id[0]}_#{base}".downcase
+          dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
           dest_file = Shellwords.escape(dest_file_plain)
           puts "#{count}. #{src_file}" if @verbose
           # TODO Add option to overwrite, if needed
@@ -167,10 +182,20 @@ class PhotoStreamBackUpper
 
       end
 
+      filecount = Dir[File.join("#{@destination}/#{streamfolder}", '**', '*')].count { |file| File.file?(file) }
       if count != ids.size
-        puts "  ERROR".red + ", processed #{count} of total #{ids.size}  (#{errors} reported errors)"
+        if filecount != ids.size
+          puts "  ERROR".red + ", processed #{count} of total #{ids.size}  (#{filecount} files in folder, #{errors} reported errors)"
+        else
+          puts "  WARN".yellow + ", processed #{count} of total #{ids.size}  (#{filecount} files in folder, #{errors} reported errors)"
+        end
       else
-        puts "  completed #{count} of total #{ids.size}"
+        if filecount != count
+          msg = "  (" + "WARN".yellow + ": count mismatch, #{filecount} files in folder)"
+        else
+          msg = ""
+        end
+        puts "  completed #{count} of total #{ids.size}" + msg
       end
 
     end
