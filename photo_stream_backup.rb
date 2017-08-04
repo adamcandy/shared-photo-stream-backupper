@@ -130,7 +130,7 @@ class PhotoStreamBackUpper
       # here we go!  each folder contains 1 or 2 files, either a image, and movie, or both
       # in the case of the live images (which are actually just a two second movie and a picture)
       ids.each do |id|
-        
+
         folder = Shellwords.escape("#{PHOTO_STREAM_DIR}/assets/#{stream_id}/#{id[0]}/") + '*'
         files = Dir[folder].reject{|f| File.directory?(f) || f.include?('thumbnail')}
 
