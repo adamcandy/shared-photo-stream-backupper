@@ -1,7 +1,7 @@
 #!/usr/bin/ruby
 
 # Requires:
-# sudo gem install rsync sqlite3
+# sudo gem install rsync sqlite3 colorize
 
 # Authors:
 # Braxton Ehle (https://github.com/braxtone/shared-photo-stream-backupper)
@@ -18,6 +18,7 @@ class PhotoStreamBackUpper
   require 'shellwords'
   require 'sqlite3'
   require 'date'
+  require 'colorize'
 
   PHOTO_STREAM_DIR="#{ENV['HOME']}/Library/Containers/com.apple.cloudphotosd/Data/Library/Application Support/com.apple.cloudphotosd/services/com.apple.photo.icloud.sharedstreams"
 
@@ -116,7 +117,7 @@ class PhotoStreamBackUpper
   def run
     @streams.each do |stream|
 
-      streamfolder = "_photostream #{stream}"
+      streamfolder = "Photostream #{stream}"
 
       FileUtils::mkdir_p "#{@destination}/#{streamfolder}"
 
@@ -127,6 +128,7 @@ class PhotoStreamBackUpper
       puts "Backing up stream '#{stream}', #{ids.size} images"
 
       count = 0
+      errors = 0
       # here we go!  each folder contains 1 or 2 files, either a image, and movie, or both
       # in the case of the live images (which are actually just a two second movie and a picture)
       ids.each do |id|
@@ -142,24 +144,33 @@ class PhotoStreamBackUpper
         timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d_%H%M%S")
 
         if files.size == 0
-          puts "  ERROR, no files found in: #{folder}"
+          puts "  ERROR".red + ", no files found in: #{folder}" if @verbose
+          errors += 1
         end
 
         files.each do |file|
           count += 1
           base = File.basename(file)
           src_file = Shellwords.escape("#{file}")
-          dest_file = Shellwords.escape("#{@destination}/#{streamfolder}/#{timestamp}_#{id[0]}_#{base}").downcase
+
+          dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}_"+"#{id[0]}_#{base}".downcase
+          dest_file = Shellwords.escape(dest_file_plain)
           puts "#{count}. #{src_file}" if @verbose
-          puts "  -> #{dest_file}" if @verbose
-          backup_image(src_file, dest_file)
+          # TODO Add option to overwrite, if needed
+          if File.file?(dest_file_plain)
+            puts "  (exists) #{dest_file}" if @verbose
+          else
+            puts "  -> #{dest_file}" if @verbose
+            backup_image(src_file, dest_file)
+          end
         end
 
       end
 
-      puts "  completed #{count} of total #{ids.size}"
       if count != ids.size
-        puts "  ERROR, processed #{count} of total #{ids.size}"
+        puts "  ERROR".red + ", processed #{count} of total #{ids.size}  (#{errors} reported errors)"
+      else
+        puts "  completed #{count} of total #{ids.size}"
       end
 
     end
