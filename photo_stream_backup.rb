@@ -1,5 +1,15 @@
 #!/usr/bin/ruby
 
+# Requires:
+# sudo gem install rsync sqlite3
+
+# Authors:
+# Braxton Ehle (https://github.com/braxtone/shared-photo-stream-backupper)
+# Adam Candy (https://github.com/adamcandy/shared-photo-stream-backupper)
+
+# Useful for epoch time investigations:
+# for f in path/to/output/photos/*; do b="$(basename "$f" | sed -e 's/\.0.*//')"; a=$(expr $b + 978310800); echo $(date -d @$a) $f; done
+
 require 'optparse'
 
 class PhotoStreamBackUpper
@@ -7,12 +17,16 @@ class PhotoStreamBackUpper
   require 'rsync'
   require 'shellwords'
   require 'sqlite3'
+  require 'date'
 
   PHOTO_STREAM_DIR="#{ENV['HOME']}/Library/Containers/com.apple.cloudphotosd/Data/Library/Application Support/com.apple.cloudphotosd/services/com.apple.photo.icloud.sharedstreams"
 
   def initialize(streams, destination, verbose = false)
-    raise ArgumentError, "Unable to read destination directory" unless File.readable? File.expand_path(destination)
+    #raise ArgumentError, "Unable to read destination directory" unless File.readable? File.expand_path(destination)
     @destination = File.expand_path(destination)
+    unless File.directory?(destination)
+      FileUtils.mkdir_p(destination)
+    end
 
     if streams.nil? 
       @streams = get_all_ps_names
@@ -101,42 +115,53 @@ class PhotoStreamBackUpper
   # of photo streams and copies the images within them to the specified directory
   def run
     @streams.each do |stream|
-      puts "Backing up stream '#{stream}'"
 
-      FileUtils::mkdir_p "#{@destination}/#{stream}"
+      streamfolder = "_photostream #{stream}"
+
+      FileUtils::mkdir_p "#{@destination}/#{streamfolder}"
 
       stream_id = get_ps_album_uuid(stream)
 
       ids = get_ps_img_uuids(stream)
 
-      puts "Backing up #{ids.size} images..."
+      puts "Backing up stream '#{stream}', #{ids.size} images"
+
+      count = 0
       # here we go!  each folder contains 1 or 2 files, either a image, and movie, or both
       # in the case of the live images (which are actually just a two second movie and a picture)
       ids.each do |id|
-        # Going to start with looking for jpg images.  If there is a jpg in there, then it will be moved as a jpg
-        source_file_jpg = Shellwords.escape("#{PHOTO_STREAM_DIR}/assets/#{stream_id}/#{id[0]}/IMG_") + '*.JPG'
-        dest_file_jpg = Shellwords.escape("#{@destination}/#{stream}/#{id[1]}.jpg")
-        # look for a jpg, back it up if need be
-        if !Dir.glob(source_file_jpg).empty?
-          puts "Backing up source file #{source_file_jpg} to #{dest_file_jpg}" if @verbose
-          backup_image(source_file_jpg, dest_file_jpg)
+        
+        folder = Shellwords.escape("#{PHOTO_STREAM_DIR}/assets/#{stream_id}/#{id[0]}/") + '*'
+        files = Dir[folder].reject{|f| File.directory?(f) || f.include?('thumbnail')}
+
+        unless id[1].nil?
+          time_epoch = 978310800 + Integer(id[1])
+        else
+          time_epoch = 0
         end
-        # now we look for movies in the same folder. 
-        source_file_mov = Shellwords.escape("#{PHOTO_STREAM_DIR}/assets/#{stream_id}/#{id[0]}/IMG_") + '*.mov'
-        dest_file_mov = Shellwords.escape("#{@destination}/#{stream}/#{id[1]}.mov")   
-        # look for a .mov, and sync if it exists
-        if !Dir.glob(source_file_mov).empty?	
-          puts "Backing up source file #{source_file_mov} to #{dest_file_mov}" if @verbose
-          backup_image(source_file_mov, dest_file_mov)
+        timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d_%H%M%S")
+
+        if files.size == 0
+          puts "  ERROR, no files found in: #{folder}"
         end
-        # look for an mp4 and sync if it exists
-        source_file_mp4 = Shellwords.escape("#{PHOTO_STREAM_DIR}/assets/#{stream_id}/#{id[0]}/IMG_") + '*.mp4'
-        dest_file_mp4 = Shellwords.escape("#{@destination}/#{stream}/#{id[1]}.mp4")
-        if !Dir.glob(source_file_mp4).empty?	
-          puts "Backing up source file #{source_file_mp4} to #{dest_file_mp4}" if @verbose
-          backup_image(source_file_mp4, dest_file_mp4)
+
+        files.each do |file|
+          count += 1
+          base = File.basename(file)
+          src_file = Shellwords.escape("#{file}")
+          dest_file = Shellwords.escape("#{@destination}/#{streamfolder}/#{timestamp}_#{id[0]}_#{base}").downcase
+          puts "#{count}. #{src_file}" if @verbose
+          puts "  -> #{dest_file}" if @verbose
+          backup_image(src_file, dest_file)
         end
+
       end
+
+      puts "  completed #{count} of total #{ids.size}"
+      if count != ids.size
+        puts "  ERROR, processed #{count} of total #{ids.size}"
+      end
+
     end
   end
 end
