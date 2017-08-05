@@ -31,7 +31,8 @@ class PhotoStreamBackUpper
 
     if streams.nil? 
       @streams = get_all_ps_names
-      puts "No streams selected, defaulting to all: '#{@streams.join("', '")}'"
+      puts "Defaulting to all streams (no streams selected):"
+			puts "  #{@streams.join("\n  ")}"
     elsif streams == ['all']
       @streams = get_all_ps_names
     else
@@ -149,18 +150,22 @@ class PhotoStreamBackUpper
           errors += 1
         end
 
-        files.each do |file|
-          if file.include?('.5.jpg')
-            puts "  WARN".yellow + ", found pesky video thumbnail: #{file}"
-          end
-        #  if File.extname(file).downcase == '.mp4'
-        #    puts files
-        #    base = File.basename(file, '.mp4')
-        #    puts "#{base}.5.jpg"
-        #  end
-        end
+        # files.each do |file|
+        #   if file.include?('.5.jpg')
+        #     puts "  WARN".yellow + ", found pesky video thumbnail: #{file}"
+        #   end
+        # #  if File.extname(file).downcase == '.mp4'
+        # #    puts files
+        # #    base = File.basename(file, '.mp4')
+        # #    puts "#{base}.5.jpg"
+        # #  end
+        # end
 
         files.each do |file|
+          if file.include?('.5.jpg')
+            puts "  WARN".yellow + ", found pesky video thumbnail: #{file}  (skipping)" if @verbose
+						next
+          end
           count += 1
           base = File.basename(file).downcase
           if File.extname(base).downcase == '.jpeg'
