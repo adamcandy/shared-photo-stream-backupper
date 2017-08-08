@@ -19,6 +19,7 @@ class PhotoStreamBackUpper
   require 'sqlite3'
   require 'date'
   require 'colorize'
+	require 'mini_exiftool'
 
   PHOTO_STREAM_DIR="#{ENV['HOME']}/Library/Containers/com.apple.cloudphotosd/Data/Library/Application Support/com.apple.cloudphotosd/services/com.apple.photo.icloud.sharedstreams"
 
@@ -167,21 +168,39 @@ class PhotoStreamBackUpper
 						next
           end
           count += 1
+          src_file = Shellwords.escape("#{file}")
+          puts "#{count}. #{src_file}" if @verbose
           base = File.basename(file).downcase
           if File.extname(base).downcase == '.jpeg'
-            base = File.basename(file, '.jpeg').downcase + '.jpg'
+            base = File.basename(file, ".*").downcase + '.jpg'
           end
-          src_file = Shellwords.escape("#{file}")
+
+					photo_src = MiniExiftool.new(file)
+					photo_ext = '.' + photo_src.file_type_extension
+					#puts photo.file_type_extension
+					if File.extname(base).downcase != photo_ext
+						a = File.extname(base).downcase
+            base = File.basename(file, ".*").downcase + photo_ext
+            puts "  (not #{a}, actually #{photo_ext})" if @verbose
+          end
+
 
           dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
           dest_file = Shellwords.escape(dest_file_plain)
-          puts "#{count}. #{src_file}" if @verbose
           # TODO Add option to overwrite, if needed
           if File.file?(dest_file_plain)
             puts "  (exists) #{dest_file}" if @verbose
           else
             puts "  -> #{dest_file}" if @verbose
             backup_image(src_file, dest_file)
+
+						photo = MiniExiftool.new(dest_file_plain)
+						if photo.album != streamfolder
+							photo.album = streamfolder
+							photo.save
+							puts '  (added album info)' if @verbose
+						end
+
           end
         end
 
