@@ -184,7 +184,6 @@ class PhotoStreamBackUpper
             puts "  (not #{a}, actually #{photo_ext})" if @verbose
           end
 
-
           dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
           dest_file = Shellwords.escape(dest_file_plain)
           # TODO Add option to overwrite, if needed
@@ -193,13 +192,18 @@ class PhotoStreamBackUpper
           else
             puts "  -> #{dest_file}" if @verbose
             backup_image(src_file, dest_file)
+						
+						original = "#{uuid}-#{base}"
 
 						photo = MiniExiftool.new(dest_file_plain)
+						photo.original_file_name = original
 						if photo.album != streamfolder
 							photo.album = streamfolder
 							photo.save
 							puts '  (added album info)' if @verbose
 						end
+        		timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d%H%M.%S")
+						system "touch -t #{timestamp} #{dest_file}"
 
           end
         end
