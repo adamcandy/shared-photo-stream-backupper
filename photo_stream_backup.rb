@@ -19,13 +19,16 @@ class PhotoStreamBackUpper
   require 'sqlite3'
   require 'date'
   require 'colorize'
-	require 'mini_exiftool'
+  require 'mini_exiftool'
 
   PHOTO_STREAM_DIR="#{ENV['HOME']}/Library/Containers/com.apple.cloudphotosd/Data/Library/Application Support/com.apple.cloudphotosd/services/com.apple.photo.icloud.sharedstreams"
 
-  def initialize(streams, destination, verbose = false)
+  def initialize(streams, destination, destination_alt, verbose = false)
     #raise ArgumentError, "Unable to read destination directory" unless File.readable? File.expand_path(destination)
     @destination = File.expand_path(destination)
+    if !destination_alt.nil?
+      @destination_alt = File.expand_path(destination_alt)
+    end
     unless File.directory?(destination)
       FileUtils.mkdir_p(destination)
     end
@@ -33,7 +36,7 @@ class PhotoStreamBackUpper
     if streams.nil? 
       @streams = get_all_ps_names
       puts "Defaulting to all streams (no streams selected):"
-			puts "  #{@streams.join("\n  ")}"
+      puts "  #{@streams.join("\n  ")}"
     elsif streams == ['all']
       @streams = get_all_ps_names
     else
@@ -146,6 +149,8 @@ class PhotoStreamBackUpper
         timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d_%H%M%S")
         uuid = "#{id[0]}".tr('-', '').downcase
 
+        #puts uuid
+
         if files.size == 0
           puts "  ERROR".red + ", no files found in: #{folder}" if @verbose
           errors += 1
@@ -165,7 +170,7 @@ class PhotoStreamBackUpper
         files.each do |file|
           if file.include?('.5.jpg')
             puts "  WARN".yellow + ", found pesky video thumbnail: #{file}  (skipping)" if @verbose
-						next
+            next
           end
           count += 1
           src_file = Shellwords.escape("#{file}")
@@ -179,55 +184,83 @@ class PhotoStreamBackUpper
           dest_file = Shellwords.escape(dest_file_plain)
           if File.file?(dest_file_plain)
             puts "  (exists) #{dest_file}" if @verbose
-          	next
+            next
           end
 
-					photo_src = MiniExiftool.new(file)
-					photo_ext = '.' + photo_src.file_type_extension
-					#puts photo.file_type_extension
-					if File.extname(base).downcase != photo_ext
-						a = File.extname(base).downcase
+          # Check based on uuid, to accomodate timestamp changes
+          # (also accepts extension differences, so all based on uuid)
+          # Could read EXIF timestamp and use here - but will be slow reading
+          base_no_ext = File.basename(file, ".*").downcase
+          dest_file_glob_plain = "#{@destination_alt}/#{streamfolder}/*-#{uuid}-#{base_no_ext}.*"
+          dest_file_glob = Shellwords.escape("#{@destination_alt}/#{streamfolder}/")+"*"+Shellwords.escape("-#{uuid}-#{base_no_ext}")+"*"
+          # Note end dot removed because some files have extras added to end by elodie
+          # dest_file_glob = Shellwords.escape("#{@destination_alt}/#{streamfolder}/")+"*"+Shellwords.escape("-#{uuid}-#{base_no_ext}.")+"*"
+          if !Dir.glob(dest_file_glob).empty?
+            puts "  (exists, differing timestamp) #{dest_file_glob}" if @verbose
+            next
+          end
+
+          # Check if ext needs correcting
+          photo_src = MiniExiftool.new(file)
+          photo_ext = '.' + photo_src.file_type_extension
+          #puts photo.file_type_extension
+          if File.extname(base).downcase != photo_ext
+            a = File.extname(base).downcase
             base = File.basename(file, ".*").downcase + photo_ext
             puts "  (not #{a}, actually #{photo_ext})" if @verbose
           end
 
+          # Check again based on adjusted extension
           dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
           dest_file = Shellwords.escape(dest_file_plain)
           # TODO Add option to overwrite, if needed
           if File.file?(dest_file_plain)
             puts "  (exists) #{dest_file}" if @verbose
-          	next
+            next
           end
 
-					puts "  -> #{dest_file}" if @verbose
-					backup_image(src_file, dest_file)
-					
-					original = "#{uuid}-#{base}"
+          puts "  -> #{dest_file}" if @verbose
+          
+          puts "  #{count}. #{src_file}" if !@verbose
+          puts "    -> #{dest_file}" if !@verbose
+          
+          backup_image(src_file, dest_file)
+          
+          original = "#{uuid}-#{base}"
 
-					photo = MiniExiftool.new(dest_file_plain)
-					photo.original_file_name = original
-					if photo.album != streamfolder
-						photo.album = streamfolder
-						photo.save
-						puts '  (added album info)' if @verbose
-					end
-					timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d%H%M.%S")
-					system "touch -t #{timestamp} #{dest_file}"
+          photo = MiniExiftool.new(dest_file_plain)
+          photo.original_file_name = original
+          if photo.album != streamfolder
+            photo.album = streamfolder
+            photo.save
+            puts '  (added album info)' if @verbose
+          end
+          timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d%H%M.%S")
+          system "touch -t #{timestamp} #{dest_file}"
 
         end
 
       end
 
       filecount = Dir[File.join("#{@destination}/#{streamfolder}", '**', '*')].count { |file| File.file?(file) }
+      filecount_alt = Dir[File.join("#{@destination_alt}/#{streamfolder}", '**', '*')].count { |file| File.file?(file) }
+      filecount_total = filecount + filecount_alt
+
+      if filecount_alt > 0
+        summary = "  (#{filecount_total} files in folders, #{filecount_alt} stored, #{filecount} new)"
+      else
+        summary = "  (#{filecount_total} files in store folder)"
+      end
+
       if count != ids.size
-        if filecount != ids.size
-          puts "  ERROR".red + ", processed #{count} of total #{ids.size}  (#{filecount} files in folder, #{errors} reported errors)"
+        if filecount_total != ids.size
+          puts "  ERROR".red + ", processed #{count} of total #{ids.size}#{summary}, #{errors} reported errors)"
         else
-          puts "  WARN".yellow + ", processed #{count} of total #{ids.size}  (#{filecount} files in folder, #{errors} reported errors)"
+          puts "  WARN".yellow + ", processed #{count} of total #{ids.size}#{summary}, #{errors} reported errors)"
         end
       else
-        if filecount != count
-          msg = "  (" + "WARN".yellow + ": count mismatch, #{filecount} files in folder)"
+        if filecount_total != count
+          msg = "  (" + "WARN".yellow + ": count mismatch, #{filecount_total} files in folder#{summary})"
         else
           msg = ""
         end
@@ -249,6 +282,10 @@ if __FILE__ == $0
 
     opts.on('-d', '--destination DEST', 'The destination folder for the images found, ie ~/Dropbox, etc') do |destination|
       options[:destination] = destination
+    end
+
+    opts.on('-a', '--alt DEST', 'An alternative folder to check for existence, e.g. elodie folder') do |destination_alt|
+      options[:destination_alt] = destination_alt
     end
 
     opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
@@ -275,6 +312,7 @@ if __FILE__ == $0
   psb = PhotoStreamBackUpper.new(
           options[:streams], 
           options[:destination], 
+          options[:destination_alt], 
           options[:verbose]
        )
   psb.run
