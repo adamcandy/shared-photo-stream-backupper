@@ -175,6 +175,13 @@ class PhotoStreamBackUpper
             base = File.basename(file, ".*").downcase + '.jpg'
           end
 
+          dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
+          dest_file = Shellwords.escape(dest_file_plain)
+          if File.file?(dest_file_plain)
+            puts "  (exists) #{dest_file}" if @verbose
+          	next
+          end
+
 					photo_src = MiniExiftool.new(file)
 					photo_ext = '.' + photo_src.file_type_extension
 					#puts photo.file_type_extension
@@ -189,23 +196,24 @@ class PhotoStreamBackUpper
           # TODO Add option to overwrite, if needed
           if File.file?(dest_file_plain)
             puts "  (exists) #{dest_file}" if @verbose
-          else
-            puts "  -> #{dest_file}" if @verbose
-            backup_image(src_file, dest_file)
-						
-						original = "#{uuid}-#{base}"
-
-						photo = MiniExiftool.new(dest_file_plain)
-						photo.original_file_name = original
-						if photo.album != streamfolder
-							photo.album = streamfolder
-							photo.save
-							puts '  (added album info)' if @verbose
-						end
-        		timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d%H%M.%S")
-						system "touch -t #{timestamp} #{dest_file}"
-
+          	next
           end
+
+					puts "  -> #{dest_file}" if @verbose
+					backup_image(src_file, dest_file)
+					
+					original = "#{uuid}-#{base}"
+
+					photo = MiniExiftool.new(dest_file_plain)
+					photo.original_file_name = original
+					if photo.album != streamfolder
+						photo.album = streamfolder
+						photo.save
+						puts '  (added album info)' if @verbose
+					end
+					timestamp = DateTime.strptime("#{time_epoch}",'%s').strftime("%Y%m%d%H%M.%S")
+					system "touch -t #{timestamp} #{dest_file}"
+
         end
 
       end
