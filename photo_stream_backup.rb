@@ -10,6 +10,9 @@
 # Useful for epoch time investigations:
 # for f in path/to/output/photos/*; do b="$(basename "$f" | sed -e 's/\.0.*//')"; a=$(expr $b + 978310800); echo $(date -d @$a) $f; done
 
+# Extras:
+# Warn if title is not nil -- since it can cause problems in elodie  (one case had a title '......')
+
 require 'optparse'
 
 class PhotoStreamBackUpper
