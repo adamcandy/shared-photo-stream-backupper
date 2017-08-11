@@ -224,8 +224,8 @@ class PhotoStreamBackUpper
 
           puts "  -> #{dest_file}" if @verbose
           
-          puts "  #{count}. #{src_file}" if !@verbose
-          puts "    -> #{dest_file}" if !@verbose
+          #puts "  #{count}. #{src_file}" if !@verbose
+          #puts "    -> #{dest_file}" if !@verbose
           
           backup_image(src_file, dest_file)
           
