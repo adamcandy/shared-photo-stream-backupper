@@ -127,8 +127,6 @@ class PhotoStreamBackUpper
 
       streamfolder = "Photostream #{stream}"
 
-      FileUtils::mkdir_p "#{@destination}/#{streamfolder}"
-
       stream_id = get_ps_album_uuid(stream)
 
       ids = get_ps_img_uuids(stream)
@@ -183,12 +181,15 @@ class PhotoStreamBackUpper
             base = File.basename(file, ".*").downcase + '.jpg'
           end
 
-          dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
-          dest_file = Shellwords.escape(dest_file_plain)
-          if File.file?(dest_file_plain)
-            puts "  (exists) #{dest_file}" if @verbose
-            next
-          end
+
+					dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
+					dest_file = Shellwords.escape(dest_file_plain)
+					if !Dir.exists?("#{@destination}/#{streamfolder}")
+						if File.file?(dest_file_plain)
+							puts "  (exists) #{dest_file}" if @verbose
+							next
+						end
+					end
 
           # Check based on uuid, to accomodate timestamp changes
           # (also accepts extension differences, so all based on uuid)
@@ -213,20 +214,25 @@ class PhotoStreamBackUpper
             puts "  (not #{a}, actually #{photo_ext})" if @verbose
           end
 
-          # Check again based on adjusted extension
-          dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
-          dest_file = Shellwords.escape(dest_file_plain)
-          # TODO Add option to overwrite, if needed
-          if File.file?(dest_file_plain)
-            puts "  (exists) #{dest_file}" if @verbose
-            next
-          end
+					# Check again based on adjusted extension
+					dest_file_plain = "#{@destination}/#{streamfolder}/#{timestamp}-#{uuid}-#{base}"
+					dest_file = Shellwords.escape(dest_file_plain)
+					if !Dir.exists?("#{@destination}/#{streamfolder}")
+						# TODO Add option to overwrite, if needed
+						if File.file?(dest_file_plain)
+							puts "  (exists) #{dest_file}" if @verbose
+							next
+						end
+					end
 
           puts "  -> #{dest_file}" if @verbose
           
           #puts "  #{count}. #{src_file}" if !@verbose
           #puts "    -> #{dest_file}" if !@verbose
           
+					if !Dir.exists?("#{@destination}/#{streamfolder}")
+      			FileUtils::mkdir_p "#{@destination}/#{streamfolder}"
+					end
           backup_image(src_file, dest_file)
           
           original = "#{uuid}-#{base}"
@@ -245,7 +251,11 @@ class PhotoStreamBackUpper
 
       end
 
-      filecount = Dir[File.join("#{@destination}/#{streamfolder}", '**', '*')].count { |file| File.file?(file) }
+			if !Dir.exists?("#{@destination}/#{streamfolder}")
+      	filecount = Dir[File.join("#{@destination}/#{streamfolder}", '**', '*')].count { |file| File.file?(file) }
+			else
+				filecount=0
+			end
       filecount_alt = Dir[File.join("#{@destination_alt}/#{streamfolder}", '**', '*')].count { |file| File.file?(file) }
       filecount_total = filecount + filecount_alt
 
